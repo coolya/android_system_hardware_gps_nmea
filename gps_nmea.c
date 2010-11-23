@@ -701,6 +701,10 @@ nmea_reader_parse( NmeaReader*  r )
 
         }
 
+    } else if ( !memcmp(tok.p, "PGLOR", 3) ) {
+
+
+	//ignore those sentence Samsung specific crap
 
     } else {
         tok.p -= 2;
