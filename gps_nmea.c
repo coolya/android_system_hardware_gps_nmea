@@ -2,7 +2,7 @@
 **
 ** Copyright 2006, The Android Open Source Project
 ** Copyright 2009, Michael Trimarchi <michael@panicking.kicks-ass.org>
-** Copyright 2009, Kolja Dummann <k.dummann@gmail.com>
+** Copyright 2010, Kolja Dummann <k.dummann@gmail.com>
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
 ** you may not use this file except in compliance with the License.
@@ -35,7 +35,7 @@
 #include <cutils/properties.h>
 #include <hardware_legacy/gps.h>
 
-#define  GPS_DEBUG  1
+#define  GPS_DEBUG  0
 
 #define  DFR(...)   LOGD(__VA_ARGS__)
 
@@ -701,7 +701,7 @@ nmea_reader_parse( NmeaReader*  r )
 
         }
 
-    } else if ( !memcmp(tok.p, "PGLOR", 3) ) {
+    } else if ( !memcmp(tok.p, "PGLOR", 5) ) {
 
 
 	//ignore those sentence Samsung specific crap
@@ -853,6 +853,8 @@ gps_state_done( GpsState*  s )
 static void
 gps_state_start( GpsState*  s )
 {
+
+    system("start glgps");
     char  cmd = CMD_START;
     int   ret;
 
@@ -860,7 +862,7 @@ gps_state_start( GpsState*  s )
     while (ret < 0 && errno == EINTR);
 
     if (ret != 1)
-        D("%s: could not send CMD_START command: ret=%d: %s",
+        LOGE("%s: could not send CMD_START command: ret=%d: %s",
           __FUNCTION__, ret, strerror(errno));
 }
 
@@ -875,8 +877,10 @@ gps_state_stop( GpsState*  s )
     while (ret < 0 && errno == EINTR);
 
     if (ret != 1)
-        D("%s: could not send CMD_STOP command: ret=%d: %s",
+        LOGE("%s: could not send CMD_STOP command: ret=%d: %s",
           __FUNCTION__, ret, strerror(errno));
+
+    system("stop glgps");
 }
 
 
@@ -1050,7 +1054,7 @@ gps_timer_thread( void*  arg )
 
     if (state->reader.fix.flags != 0) {
 
-      D("gps fix cb: 0x%x", state->reader.fix.flags);
+      LOGD("gps fix cb: 0x%x", state->reader.fix.flags);
 
       if (state->callbacks.location_cb) {
           state->callbacks.location_cb( &state->reader.fix );
@@ -1066,7 +1070,7 @@ gps_timer_thread( void*  arg )
 
     if (state->reader.sv_status_changed != 0) {
 
-      D("gps sv status callback");
+      LOGD("gps sv status callback");
 
       if (state->callbacks.sv_status_cb) {
           state->callbacks.sv_status_cb( &state->reader.sv_status );
@@ -1104,14 +1108,14 @@ gps_state_init( GpsState*  state )
     state->first_fix  = 0;
 
     if (sem_init(&state->fix_sem, 0, 1) != 0) {
-      D("gps semaphore initialization failed! errno = %d", errno);
+      LOGD("gps semaphore initialization failed! errno = %d", errno);
       return;
     }
 
     // look for a kernel-provided device name
     
     if (property_get("ro.gps.soket",prop,"") == 0) {
-        D("no kernel-provided gps device name");
+        LOGD("no kernel-provided gps device name");
         return;
     }
 
@@ -1129,7 +1133,7 @@ gps_state_init( GpsState*  state )
         return;
     }
 
-    D("gps will read from %s", device);
+    LOGD("gps will read from %s", device);
 
     // disable echo on serial lines
    // if ( isatty( state->fd ) ) {
@@ -1152,7 +1156,7 @@ gps_state_init( GpsState*  state )
         goto Fail;
     }
 
-    D("gps state initialized");
+    LOGD("gps state initialized");
 
     return;
 
@@ -1171,7 +1175,7 @@ Fail:
 
 
 static int
-freerunner_gps_init(GpsCallbacks* callbacks)
+nmea_gps_init(GpsCallbacks* callbacks)
 {
     GpsState*  s = _gps_state;
 
@@ -1187,7 +1191,7 @@ freerunner_gps_init(GpsCallbacks* callbacks)
 }
 
 static void
-freerunner_gps_cleanup(void)
+nmea_gps_cleanup(void)
 {
     GpsState*  s = _gps_state;
 
@@ -1197,7 +1201,7 @@ freerunner_gps_cleanup(void)
 
 
 static int
-freerunner_gps_start()
+nmea_gps_start()
 {
     GpsState*  s = _gps_state;
 
@@ -1206,14 +1210,14 @@ freerunner_gps_start()
         return -1;
     }
 
-    D("%s: called", __FUNCTION__);
+    LOGD("%s: called", __FUNCTION__);
     gps_state_start(s);
     return 0;
 }
 
 
 static int
-freerunner_gps_stop()
+nmea_gps_stop()
 {
     GpsState*  s = _gps_state;
 
@@ -1222,14 +1226,14 @@ freerunner_gps_stop()
         return -1;
     }
 
-    D("%s: called", __FUNCTION__);
+    LOGD("%s: called", __FUNCTION__);
     gps_state_stop(s);
     return 0;
 }
 
 
 static void
-freerunner_gps_set_fix_frequency(int freq)
+nmea_gps_set_fix_frequency(int freq)
 {
     GpsState*  s = _gps_state;
 
@@ -1242,21 +1246,21 @@ freerunner_gps_set_fix_frequency(int freq)
 
     s->fix_freq = (freq <= 0) ? 1 : freq;
 
-    D("gps fix frquency set to %d secs", freq);
+    LOGD("gps fix frquency set to %d secs", freq);
 }
 
 static int
-freerunner_gps_inject_time(GpsUtcTime time, int64_t timeReference, int uncertainty)
+nmea_gps_inject_time(GpsUtcTime time, int64_t timeReference, int uncertainty)
 {
     return 0;
 }
 
 static void
-freerunner_gps_delete_aiding_data(GpsAidingData flags)
+nmea_gps_delete_aiding_data(GpsAidingData flags)
 {
 }
 
-static int freerunner_gps_set_position_mode(GpsPositionMode mode, int fix_frequency)
+static int nmea_gps_set_position_mode(GpsPositionMode mode, int fix_frequency)
 {
     GpsState*  s = _gps_state;
     
@@ -1266,33 +1270,33 @@ static int freerunner_gps_set_position_mode(GpsPositionMode mode, int fix_freque
         //return -1;
 
     if (!s->init || fix_frequency < 0) {
-        D("%s: called with uninitialized state !!", __FUNCTION__);
+        LOGE("%s: called with uninitialized state !!", __FUNCTION__);
         return -1;
     }
 
     s->fix_freq = fix_frequency;
 
-    D("gps fix frquency set to %d secs", fix_frequency);
+    LOGD("gps fix frquency set to %d secs", fix_frequency);
 
     return 0;
 }
 
 static const void*
-freerunner_gps_get_extension(const char* name)
+nmea_gps_get_extension(const char* name)
 {
     return NULL;
 }
 
 static const GpsInterface  freerunnerGpsInterface = {
-    freerunner_gps_init,
-    freerunner_gps_start,
-    freerunner_gps_stop,
-    freerunner_gps_set_fix_frequency,
-    freerunner_gps_cleanup,
-    freerunner_gps_inject_time,
-    freerunner_gps_delete_aiding_data,
-    freerunner_gps_set_position_mode,
-    freerunner_gps_get_extension,
+    nmea_gps_init,
+    nmea_gps_start,
+    nmea_gps_stop,
+    nmea_gps_set_fix_frequency,
+    nmea_gps_cleanup,
+    nmea_gps_inject_time,
+    nmea_gps_delete_aiding_data,
+    nmea_gps_set_position_mode,
+    nmea_gps_get_extension,
 };
 
 const GpsInterface* gps_get_hardware_interface()
