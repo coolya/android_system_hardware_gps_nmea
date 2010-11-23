@@ -28,14 +28,14 @@
 #include <signal.h>
 #include <unistd.h>
 
-#define  LOG_TAG  "gps_fr"
+#define  LOG_TAG  "gps_nmea"
 
 #include <cutils/log.h>
 #include <cutils/sockets.h>
 #include <cutils/properties.h>
 #include <hardware_legacy/gps.h>
 
-#define  GPS_DEBUG  0
+#define  GPS_DEBUG  1
 
 #define  DFR(...)   LOGD(__VA_ARGS__)
 
@@ -104,13 +104,8 @@ typedef struct {
 static GpsState  _gps_state[1];
 static GpsState *gps_state = _gps_state;
 
-#define GPS_POWER_IF "/sys/bus/platform/devices/neo1973-pm-gps.0/power_on"
-
 #define GPS_DEV_SLOW_UPDATE_RATE (10)
 #define GPS_DEV_HIGH_UPDATE_RATE (1)
-
-#define GPS_DEV_LOW_BAUD  (B9600)
-#define GPS_DEV_HIGH_BAUD (B19200)
 
 static void gps_dev_init(int fd);
 static void gps_dev_deinit(int fd);
@@ -504,7 +499,7 @@ nmea_reader_parse( NmeaReader*  r )
     }
 
     nmea_tokenizer_init(tzer, r->in, r->in + r->pos);
-#if GPS_DEBUG
+#if 0
     {
         int  n;
         D("Found %d tokens", tzer->count);
@@ -1111,12 +1106,12 @@ gps_state_init( GpsState*  state )
 
     // look for a kernel-provided device name
     
-    if (property_get("ro.kernel.android.gps",prop,"") == 0) {
+    if (property_get("ro.gps.soket",prop,"") == 0) {
         D("no kernel-provided gps device name");
         return;
     }
 
-    if ( snprintf(device, sizeof(device), "/dev/%s", prop) >= (int)sizeof(device) ) {
+    if ( snprintf(device, sizeof(device), "%s", prop) >= (int)sizeof(device) ) {
         LOGE("gps serial device name too long: '%s'", prop);
         return;
     }
@@ -1133,15 +1128,15 @@ gps_state_init( GpsState*  state )
     D("gps will read from %s", device);
 
     // disable echo on serial lines
-    if ( isatty( state->fd ) ) {
-        struct termios  ios;
-        tcgetattr( state->fd, &ios );
-        ios.c_lflag = 0;  /* disable ECHO, ICANON, etc... */
-        ios.c_oflag &= (~ONLCR); /* Stop \n -> \r\n translation on output */
-        ios.c_iflag &= (~(ICRNL | INLCR)); /* Stop \r -> \n & \n -> \r translation on input */
-        ios.c_iflag |= (IGNCR | IXOFF);  /* Ignore \r & XON/XOFF on input */
-        tcsetattr( state->fd, TCSANOW, &ios );
-    }
+   // if ( isatty( state->fd ) ) {
+   //     struct termios  ios;
+   //     tcgetattr( state->fd, &ios );
+   //     ios.c_lflag = 0;  /* disable ECHO, ICANON, etc... */
+   //     ios.c_oflag &= (~ONLCR); /* Stop \n -> \r\n translation on output */
+   //     ios.c_iflag &= (~(ICRNL | INLCR)); /* Stop \r -> \n & \n -> \r translation on input */
+   //     ios.c_iflag |= (IGNCR | IXOFF);  /* Ignore \r & XON/XOFF on input */
+   //     tcsetattr( state->fd, TCSANOW, &ios );
+   // }
 
     if ( socketpair( AF_LOCAL, SOCK_STREAM, 0, state->control ) < 0 ) {
         LOGE("could not create thread control socket pair: %s", strerror(errno));
@@ -1261,9 +1256,10 @@ static int freerunner_gps_set_position_mode(GpsPositionMode mode, int fix_freque
 {
     GpsState*  s = _gps_state;
     
-    // only standalone supported for now.
+    // Ignore it because gpsd gets the agps data via RIL
     if (mode != GPS_POSITION_MODE_STANDALONE)
-        return -1;
+	LOGW("only standalone supported");
+        //return -1;
 
     if (!s->init || fix_frequency < 0) {
         D("%s: called with uninitialized state !!", __FUNCTION__);
@@ -1310,7 +1306,7 @@ const GpsInterface* gps_get_hardware_interface()
 
 static void gps_dev_power(int state)
 {
-    char   prop[PROPERTY_VALUE_MAX];
+    /*char   prop[PROPERTY_VALUE_MAX];
     int fd;
     char cmd = '0';
     int ret;
@@ -1341,7 +1337,7 @@ static void gps_dev_power(int state)
 
     close(fd);
 
-    DFR("gps power state = %c", cmd);
+    DFR("gps power state = %c", cmd);*/
 
     return;
 
@@ -1349,6 +1345,7 @@ static void gps_dev_power(int state)
 
 static void gps_dev_send(int fd, char *msg)
 {
+/*
   int i, n, ret;
 
   i = strlen(msg);
@@ -1365,7 +1362,7 @@ static void gps_dev_send(int fd, char *msg)
 
     n += ret;
 
-  } while (n < i);
+  } while (n < i);*/
 
   return;
 
