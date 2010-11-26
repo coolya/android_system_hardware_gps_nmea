@@ -37,6 +37,8 @@
 
 #define  GPS_DEBUG  0
 
+#define GPS_POWER_IF "/sys/bus/platform/devices/neo1973-pm-gps.0/power_on"
+
 #define  DFR(...)   LOGD(__VA_ARGS__)
 
 #if GPS_DEBUG
@@ -477,7 +479,9 @@ nmea_reader_update_speed( NmeaReader*  r,
         return -1;
 
     r->fix.flags   |= GPS_LOCATION_HAS_SPEED;
-    r->fix.speed    = str2float(tok.p, tok.end);
+
+    //converting nmea konts into meters per second
+    r->fix.speed    = str2float(tok.p, tok.end)* 1.852 / 3.6;;
     return 0;
 }
 
@@ -708,7 +712,7 @@ nmea_reader_parse( NmeaReader*  r )
 
     } else {
         tok.p -= 2;
-        DFR("unknown sentence '%.*s", tok.end-tok.p, tok.p);
+        D("unknown sentence '%.*s", tok.end-tok.p, tok.p);
     }
 
     if (!gps_state->first_fix &&
@@ -853,7 +857,7 @@ gps_state_done( GpsState*  s )
 static void
 gps_state_start( GpsState*  s )
 {
-
+    //start Samsung gpsd 
     system("start glgps");
     char  cmd = CMD_START;
     int   ret;
@@ -879,8 +883,10 @@ gps_state_stop( GpsState*  s )
     if (ret != 1)
         LOGE("%s: could not send CMD_STOP command: ret=%d: %s",
           __FUNCTION__, ret, strerror(errno));
-
+    //stop Samsung gpsd
     system("stop glgps");
+    //power down gps dev via gpio because glgps doesn't 
+    gps_dev_power(0);
 }
 
 
@@ -1135,17 +1141,6 @@ gps_state_init( GpsState*  state )
 
     LOGD("gps will read from %s", device);
 
-    // disable echo on serial lines
-   // if ( isatty( state->fd ) ) {
-   //     struct termios  ios;
-   //     tcgetattr( state->fd, &ios );
-   //     ios.c_lflag = 0;  /* disable ECHO, ICANON, etc... */
-   //     ios.c_oflag &= (~ONLCR); /* Stop \n -> \r\n translation on output */
-   //     ios.c_iflag &= (~(ICRNL | INLCR)); /* Stop \r -> \n & \n -> \r translation on input */
-   //     ios.c_iflag |= (IGNCR | IXOFF);  /* Ignore \r & XON/XOFF on input */
-   //     tcsetattr( state->fd, TCSANOW, &ios );
-   // }
-
     if ( socketpair( AF_LOCAL, SOCK_STREAM, 0, state->control ) < 0 ) {
         LOGE("could not create thread control socket pair: %s", strerror(errno));
         goto Fail;
@@ -1314,7 +1309,7 @@ const GpsInterface* gps_get_hardware_interface()
 
 static void gps_dev_power(int state)
 {
-    /*char   prop[PROPERTY_VALUE_MAX];
+    char   prop[PROPERTY_VALUE_MAX];
     int fd;
     char cmd = '0';
     int ret;
@@ -1345,146 +1340,8 @@ static void gps_dev_power(int state)
 
     close(fd);
 
-    DFR("gps power state = %c", cmd);*/
+    DFR("gps power state = %c", cmd);
 
     return;
-
-}
-
-static void gps_dev_send(int fd, char *msg)
-{
-/*
-  int i, n, ret;
-
-  i = strlen(msg);
-
-  n = 0;
-
-  do {
-
-    ret = write(fd, msg + n, i - n);
-
-    if (ret < 0 && errno == EINTR) {
-      continue;
-    }
-
-    n += ret;
-
-  } while (n < i);*/
-
-  return;
-
-}
-
-static unsigned char gps_dev_calc_nmea_csum(char *msg)
-{
-  unsigned char csum = 0;
-  int i;
-
-  for (i = 1; msg[i] != '*'; ++i) {
-    csum ^= msg[i];
-  }
-
-  return csum;
-}
-
-static void gps_dev_set_nmea_message_rate(int fd, char *msg, int rate)
-{
-
-  char buff[50];
-  int i;
-
-  sprintf(buff, "$PUBX,40,%s,%d,%d,%d,0*", msg, rate, rate, rate);
-
-  i = strlen(buff);
-
-  sprintf((buff + i), "%02x\r\n", gps_dev_calc_nmea_csum(buff));
-
-  gps_dev_send(fd, buff);
-
-  D("gps sent to device: %s", buff);
-
-  return;
-
-}
-
-static void gps_dev_set_baud_rate(int fd, int baud)
-{
-
-  char buff[50];
-  int i, u;
-
-  for (u = 0; u < 3; ++u) {
-
-    sprintf(buff, "$PUBX,41,%d,0003,0003,%d,0*", u, baud);
-
-    i = strlen(buff);
-
-    sprintf((buff + i), "%02x\r\n", gps_dev_calc_nmea_csum(buff));
-
-    gps_dev_send(fd, buff);
-
-    D("gps sent to device: %s", buff);
-
-  }
-
-  return;
-
-}
-
-static void gps_dev_set_message_rate(int fd, int rate)
-{
-
-  unsigned int i;
-
-  char *msg[] = {
-                 "GGA", "GLL", "ZDA",
-                 "VTG", "GSA", "GSV",
-                 "RMC"
-                };
-
-  for (i = 0; i < sizeof(msg)/sizeof(msg[0]); ++i) {
-    gps_dev_set_nmea_message_rate(fd, msg[i], rate);
-  }
-
-  return;
-
-}
-
-static void gps_dev_init(int fd)
-{
-
-  gps_dev_power(1);
-
-  usleep(1000*1000);
-
-  // To set to STOP state
-  gps_dev_stop(fd);
-
-  return;
-
-}
-
-static void gps_dev_deinit(int fd)
-{
-  gps_dev_power(0);
-}
-
-static void gps_dev_start(int fd)
-{
-  // Set full message rate
-  gps_dev_set_message_rate(fd, GPS_DEV_HIGH_UPDATE_RATE);
-
-  D("gps dev start initiated");
-
-}
-
-static void gps_dev_stop(int fd)
-{
-
-  // Set slow message rate
-  gps_dev_set_message_rate(fd, GPS_DEV_SLOW_UPDATE_RATE);
-
-  D("gps dev stop initiated");
 
 }
