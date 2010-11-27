@@ -106,14 +106,8 @@ typedef struct {
 static GpsState  _gps_state[1];
 static GpsState *gps_state = _gps_state;
 
-#define GPS_DEV_SLOW_UPDATE_RATE (10)
-#define GPS_DEV_HIGH_UPDATE_RATE (1)
-
-static void gps_dev_init(int fd);
-static void gps_dev_deinit(int fd);
-static void gps_dev_start(int fd);
-static void gps_dev_stop(int fd);
 static void *gps_timer_thread( void*  arg );
+static void gps_dev_power(int state);
 
 /*****************************************************************/
 /*****************************************************************/
@@ -943,7 +937,6 @@ gps_state_thread( void*  arg )
 
     D("gps thread running");
 
-    gps_dev_init(gps_fd);
     GPS_STATUS_CB(state->callbacks, GPS_STATUS_ENGINE_ON);
 
     // now loop
@@ -984,8 +977,7 @@ gps_state_thread( void*  arg )
                             D("gps thread starting  location_cb=%p", state->callbacks.location_cb);
                             started = 1;
 
-                            gps_dev_start(gps_fd);
-
+                            
                             GPS_STATUS_CB(state->callbacks, GPS_STATUS_SESSION_BEGIN);
 
                             state->init = STATE_START;
@@ -1004,8 +996,6 @@ gps_state_thread( void*  arg )
                             void *dummy;
                             D("gps thread stopping");
                             started = 0;
-
-                            gps_dev_stop(gps_fd);
 
                             state->init = STATE_INIT;
 
@@ -1039,8 +1029,6 @@ gps_state_thread( void*  arg )
     }
 Exit:
     GPS_STATUS_CB(state->callbacks, GPS_STATUS_ENGINE_OFF);
-    gps_dev_deinit(gps_fd);
-
     return NULL;
 }
 
