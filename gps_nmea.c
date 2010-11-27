@@ -37,7 +37,7 @@
 
 #define  GPS_DEBUG  0
 
-#define GPS_POWER_IF "/sys/bus/platform/devices/neo1973-pm-gps.0/power_on"
+#define GPS_POWER_IF "/sys/class/sec/gps/GPS_PWR_EN/value"
 
 #define  DFR(...)   LOGD(__VA_ARGS__)
 
